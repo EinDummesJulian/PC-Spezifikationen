@@ -1,0 +1,267 @@
+import sqlite3
+
+
+# DATENBANK ÖFFNEN
+
+
+db = sqlite3.connect("hardware.db")
+
+cursor = db.cursor()
+
+
+
+#  CPU-TABELLE (hardware.db)
+
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS cpus (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    cores INTEGER,
+    threads INTEGER,
+    benchmark INTEGER,
+    power_watt INTEGER
+)
+""")
+
+
+
+# GPU-TABELLE (hardware.db)
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS gpus (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    vram INTEGER,
+    benchmark INTEGER,
+    power_watt INTEGER
+)
+""")
+
+for tabelle in ("cpus", "gpus"):
+    spalten = [spalte[1] for spalte in cursor.execute(f"PRAGMA table_info({tabelle})")]
+    if "power_watt" not in spalten:
+        cursor.execute(f"ALTER TABLE {tabelle} ADD COLUMN power_watt INTEGER")
+
+
+
+# CPU DATENBANK (hardware.db) - 1. Name, 2. Kerne, 3. Threads, 4. Benchmark, 5. Verbrauch in Watt
+
+
+cpus = [
+    ("Intel Core i7-8700K", 6, 12, 9500, 95),
+    ("AMD Ryzen 7 2700X", 8, 16, 9000, 105),
+    ("Intel Core i9-9900K", 8, 16, 11500, 95),
+    ("AMD Ryzen 5 3600", 6, 12, 10500, 65),
+    ("Intel Core i7-10700F", 8, 16, 13000, 65),
+    ("AMD Ryzen 7 5800X", 8, 16, 14500, 105),
+    ("AMD Ryzen 5 5600", 6, 12, 12000, 65),
+    ("Intel Core i5-12400F", 6, 12, 15000, 65),
+    ("Intel Core i7-12700K", 12, 20, 19000, 125),
+    ("AMD Ryzen 5 7600", 6, 12, 14500, 65),
+    ("AMD Ryzen 7 7800X3D", 8, 16, 18000, 120),
+    ("Intel Core i5-13600K", 14, 20, 20500, 125),
+    ("AMD Ryzen 7 7700X", 8, 16, 19500, 105),
+    ("Intel Core i7-14700K", 20, 28, 24500, 125),
+    ("AMD Ryzen 7 9800X3D", 8, 16, 24500, 120),
+    ("Intel Core Ultra 7 265K", 20, 20, 25000, 125),
+    ("AMD Ryzen 9 9950X", 16, 32, 30000, 170)
+]
+
+
+cursor.executemany("""
+INSERT OR IGNORE INTO cpus
+(name, cores, threads, benchmark, power_watt)
+VALUES (?, ?, ?, ?, ?)
+""", cpus)
+cursor.executemany("UPDATE cpus SET power_watt = ? WHERE name = ?", [(cpu[4], cpu[0]) for cpu in cpus])
+
+
+# GPU DATENBANK (hardware.db) - 1. Name, 2. VRAM, 3. Benchmark, 4. Verbrauch in Watt
+
+
+gpus = [
+    ("RTX 3050", 8, 6200, 130),
+    ("GTX 1060", 6, 7000, 120),
+    ("RTX 2060", 6, 9500, 160),
+    ("RX 5700 XT", 8, 11000, 225),
+    ("RTX 3060", 12, 9000, 170),
+    ("RX 6600", 8, 8000, 132),
+    ("RTX 3070", 8, 14500, 220),
+    ("RX 6700 XT", 12, 12000, 230),
+    ("RTX 3080", 10, 21000, 320),
+    ("RX 6800 XT", 16, 20500, 300),
+    ("RTX 4060", 8, 10500, 115),
+    ("RTX 4070", 12, 17000, 200),
+    ("RX 7800 XT", 16, 18000, 263),
+    ("RTX 4070 SUPER", 12, 19000, 220),
+    ("RX 7900 XT", 20, 23500, 315),
+    ("RTX 4080 SUPER", 16, 28500, 320),
+    ("RX 7900 XTX", 24, 30000, 355),
+    ("RTX 4090", 24, 36500, 450),
+    ("RTX 5070", 12, 22000, 250),
+    ("RX 9070", 16, 25000, 220),
+    ("RTX 5070 Ti", 16, 25000, 300),
+    ("RX 9070 XT", 16, 27500, 304),
+    ("RTX 5080", 16, 30000, 360),
+    ("RTX 5090", 32, 40000, 575)
+]
+
+
+cursor.executemany("""
+INSERT OR IGNORE INTO gpus
+(name, vram, benchmark, power_watt)
+VALUES (?, ?, ?, ?)
+""", gpus)
+cursor.executemany("UPDATE gpus SET power_watt = ? WHERE name = ?", [(gpu[3], gpu[0]) for gpu in gpus])
+
+cursor.execute("UPDATE cpus SET power_watt = 65 WHERE power_watt IS NULL")
+cursor.execute("UPDATE gpus SET power_watt = 150 WHERE power_watt IS NULL")
+
+
+
+#  BEWERTUNG
+
+
+def komponenten_anzeigen(tabelle):
+    """Gibt die Komponenten einer Tabelle nummeriert aus."""
+    cursor.execute(f"SELECT id, name, benchmark, power_watt FROM {tabelle} ORDER BY benchmark DESC")
+    komponenten = cursor.fetchall()
+
+    for nummer, (_, name, benchmark, power_watt) in enumerate(komponenten, start=1):
+        print(f"{nummer}. {name} - Benchmark: {benchmark} - Verbrauch: {power_watt} W")
+
+    return komponenten
+
+
+def komponent_auswaehlen(tabelle, bezeichnung):
+    """Lässt den Nutzer eine Komponente aus der Datenbank auswählen."""
+    print(f"\nVerfügbare {bezeichnung}:\n")
+    komponenten = komponenten_anzeigen(tabelle)
+
+    while True:
+        auswahl = input(f"\nNummer der gewünschten {bezeichnung}: ")
+        try:
+            nummer = int(auswahl)
+            if 1 <= nummer <= len(komponenten):
+                return komponenten[nummer - 1]
+        except ValueError:
+            pass
+
+        print("Ungültige Auswahl. Bitte eine angezeigte Nummer eingeben.")
+
+
+def bewertung(benchmark, hoechster_benchmark):
+    """Berechnet eine relative Bewertung von 0 bis 100 Punkten."""
+    return round(benchmark / hoechster_benchmark * 100, 1)
+
+
+def bewertung_text(punkte):
+    if punkte >= 85:
+        return "Hervorragend"
+    if punkte >= 65:
+        return "Sehr gut"
+    if punkte >= 45:
+        return "Gut"
+    if punkte >= 25:
+        return "Mittelmäßig"
+    return "Einsteiger"
+
+
+def netzteil_eingeben():
+    while True:
+        try:
+            watt = int(input("\nWie viel Watt hat dein Netzteil? "))
+            if watt > 0:
+                return watt
+        except ValueError:
+            pass
+
+        print("Bitte eine positive Wattzahl eingeben, zum Beispiel 650.")
+
+
+def ram_eingeben():
+    while True:
+        try:
+            ram_gb = int(input("\nWie viel RAM hast du (GB)? "))
+            if ram_gb > 0:
+                break
+        except ValueError:
+            pass
+
+        print("Bitte eine positive Größe eingeben, zum Beispiel 16 oder 32.")
+
+    erlaubte_ddr_typen = ("DDR3", "DDR4", "DDR5")
+    while True:
+        ddr_typ = input("Welchen RAM-Typ hast du (DDR3, DDR4 oder DDR5)? ").strip().upper()
+        if ddr_typ in erlaubte_ddr_typen:
+            return ram_gb, ddr_typ
+
+        print("Bitte DDR3, DDR4 oder DDR5 eingeben.")
+
+
+def ram_bewertung(ram_gb, ddr_typ):
+    kapazitaet_punkte = min(ram_gb / 32 * 100, 100)
+    ddr_punkte = {"DDR3": 55, "DDR4": 80, "DDR5": 100}[ddr_typ]
+    return round(kapazitaet_punkte * 0.6 + ddr_punkte * 0.4, 1)
+
+
+def pc_bewerten():
+    cpu = komponent_auswaehlen("cpus", "CPU")
+    gpu = komponent_auswaehlen("gpus", "GPU")
+    netzteil_watt = netzteil_eingeben()
+    ram_gb, ddr_typ = ram_eingeben()
+
+    cursor.execute("SELECT MAX(benchmark) FROM cpus")
+    hoechster_cpu_benchmark = cursor.fetchone()[0]
+    cursor.execute("SELECT MAX(benchmark) FROM gpus")
+    hoechster_gpu_benchmark = cursor.fetchone()[0]
+
+    cpu_punkte = bewertung(cpu[2], hoechster_cpu_benchmark)
+    gpu_punkte = bewertung(gpu[2], hoechster_gpu_benchmark)
+    benoetigte_watt = cpu[3] + gpu[3] + 100
+    netzteil_punkte = min(netzteil_watt / benoetigte_watt * 100, 100)
+    ram_punkte = ram_bewertung(ram_gb, ddr_typ)
+    gesamtpunkte = round(
+        cpu_punkte * 0.3
+        + gpu_punkte * 0.45
+        + ram_punkte * 0.15
+        + netzteil_punkte * 0.1,
+        1
+    )
+
+    print("\n========== PC-BEWERTUNG ==========")
+    print(f"CPU: {cpu[1]}")
+    print(f"CPU-Bewertung: {cpu_punkte}/100 - {bewertung_text(cpu_punkte)}")
+    print(f"GPU: {gpu[1]}")
+    print(f"GPU-Bewertung: {gpu_punkte}/100 - {bewertung_text(gpu_punkte)}")
+    print(f"RAM: {ram_gb} GB {ddr_typ}")
+    print(f"RAM-Bewertung: {ram_punkte}/100 - {bewertung_text(ram_punkte)}")
+    print(f"Netzteil: {netzteil_watt} W")
+    print(f"Empfohlen: mindestens {benoetigte_watt} W")
+    if netzteil_watt >= benoetigte_watt:
+        print("Netzteil-Bewertung: Ausreichend")
+    else:
+        print("Netzteil-Bewertung: Zu schwach")
+    print("----------------------------------")
+    print(f"Gesamt: {gesamtpunkte}/100 - {bewertung_text(gesamtpunkte)}")
+    print("==================================")
+    print("\nHinweis: Diese Bewertung basiert auf den Benchmark-Werten der Komponenten und ist eine grobe Einschätzung der Leistungsfähigkeit deines PCs.")
+    print("\n© 2026 Julian. Alle Rechte vorbehalten. Code verwirklicht in VSStudio Code.")
+
+
+# SPEICHERN UND STARTEN
+
+
+db.commit()
+
+
+if __name__ == "__main__":
+    try:
+        pc_bewerten()
+    except Exception as fehler:
+        print(f"\nFehler: {fehler}")
+        print("\nBitte sende mir diese Fehlermeldung, falls der Fehler weiter auftritt.")
+        input("Enter drücken zum Beenden...")
+    finally:
+        db.close()
